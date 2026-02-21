@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "coco"
+version = "0.1.0"
+description = "A command-line coding agent powered by LangChain and LangGraph"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"  # chromadb uses pydantic v1, incompatible with Python 3.14+
+license = { text = "MIT" }
+authors = [{ name = "Siddhartha Mukherjee", email = "mukherjee.siddhartha@gmail.com" }]
+keywords = ["ai", "agent", "coding", "cli", "langchain", "langgraph"]
+
+dependencies = [
+    # LangChain ecosystem
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-anthropic>=0.3.0",
+    "langchain-community>=0.3.0",
+    "langchain-text-splitters>=0.3.0",
+    "langchain-chroma>=0.1.0",
+    "langgraph>=0.2.0",
+    # Vector DB (local, no server) — FAISS works on all Python versions
+    "faiss-cpu>=1.7.0",
+    # Chroma is optional (works on Python 3.11-3.13 only, requires pydantic v1)
+    "chromadb>=0.5.0",
+    # Embeddings (local, free)
+    "sentence-transformers>=3.0.0",
+    # Web search (free, no API key)
+    "duckduckgo-search>=6.0.0",
+    # CLI and display
+    "prompt_toolkit>=3.0.0",
+    "rich>=13.0.0",
+    # Config
+    "tomli-w>=1.0.0",
+    # Utilities
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+coco = "coco.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.12.0",
+    "mypy>=1.8.0",
+    "ruff>=0.3.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/coco"]
+
+[tool.hatch.envs.default]
+python = "3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
