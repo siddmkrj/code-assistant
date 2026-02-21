@@ -64,11 +64,13 @@ def _build_llms(config):
 def _build_embeddings():
     """Build a local HuggingFace sentence-transformer embedding model.
 
-    Falls back to FakeEmbeddings if sentence-transformers is not installed,
-    which allows the app to start without a working indexer (degraded mode).
+    Uses langchain-huggingface (the current, non-deprecated package).
+    Falls back to FakeEmbeddings if langchain-huggingface / sentence-transformers
+    is not installed, which allows the app to start without a working indexer
+    (degraded mode).
     """
     try:
-        from langchain_community.embeddings import HuggingFaceEmbeddings  # noqa: PLC0415
+        from langchain_huggingface import HuggingFaceEmbeddings  # noqa: PLC0415
         return HuggingFaceEmbeddings(
             model_name="all-MiniLM-L6-v2",
             model_kwargs={"device": "cpu"},

@@ -10,6 +10,8 @@ for a future version.
 """
 from __future__ import annotations
 
+import warnings
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
@@ -23,17 +25,27 @@ class ContextCompressor:
         self._memory = self._build_memory()
 
     def _build_memory(self):
-        # In langchain 1.x, legacy memory classes moved to langchain_classic
+        # In langchain 1.x, legacy memory classes moved to langchain_classic.
+        # We suppress the deprecation warning here because we're using this class
+        # intentionally for its token-aware auto-summarization feature, and have
+        # noted the planned migration in the module docstring above.
         try:
             from langchain_classic.memory import ConversationSummaryBufferMemory  # noqa: PLC0415
         except ImportError:
             from langchain.memory import ConversationSummaryBufferMemory  # noqa: PLC0415
-        return ConversationSummaryBufferMemory(
-            llm=self._llm,
-            max_token_limit=self._max_token_limit,
-            return_messages=True,
-            memory_key="chat_history",
-        )
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=".*migrating_memory.*",
+                category=DeprecationWarning,
+            )
+            return ConversationSummaryBufferMemory(
+                llm=self._llm,
+                max_token_limit=self._max_token_limit,
+                return_messages=True,
+                memory_key="chat_history",
+            )
 
     def add_interaction(self, human_input: str, ai_output: str) -> None:
         """Record one turn of conversation for compression tracking."""
