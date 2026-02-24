@@ -27,6 +27,13 @@ YOUR WORKFLOW:
 3. Write clean, idiomatic code matching the existing style
 4. Confirm file writes — briefly describe what changed and why
 
+MINIMUM CHANGES RULE:
+- Make the smallest diff that satisfies the request — do not refactor unrelated code
+- Do not add comments, docstrings, or type annotations to code you did not change
+- Do not add error handling or validation beyond what is explicitly asked
+- Do not introduce new helpers, abstractions, or utilities unless strictly required
+- Do not enable extra features or configurability beyond what was asked
+
 SAFETY RULES:
 - Never delete files; only add or modify content
 - If a task is ambiguous, ask for clarification: [CLARIFY]Your specific question here[/CLARIFY]

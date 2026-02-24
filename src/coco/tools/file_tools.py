@@ -37,9 +37,12 @@ def write_file(path: str, content: str) -> str:
     when safety.confirm_file_writes is true (the default).
     """
     try:
+        from ..cli.display import print_file_diff  # noqa: PLC0415
         p = Path(path)
+        old_content: str | None = p.read_text(encoding="utf-8") if p.exists() else None
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
+        print_file_diff(path, old_content, content)
         return f"Successfully wrote {len(content)} characters to {path}"
     except PermissionError:
         return f"Error: Permission denied writing to: {path}"

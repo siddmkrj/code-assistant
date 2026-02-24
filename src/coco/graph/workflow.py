@@ -102,10 +102,12 @@ class CocoGraph:
     # --------------------------------------------------------------- nodes
 
     def _router_node(self, state: CocoState) -> dict:
+        from ..cli.display import console  # noqa: PLC0415
         task_type = self._router.classify(state["messages"])
         # Respect explicit task_type passed in (e.g. /code, /plan commands)
         if state.get("task_type") not in ("auto", "", None):
             task_type = state["task_type"]
+        console.print(f"[muted]routing → {task_type}[/muted]")
         return {"task_type": task_type, "current_agent": "router"}
 
     def _code_node(self, state: CocoState) -> dict:
@@ -122,6 +124,8 @@ class CocoGraph:
 
     def _run_agent(self, agent, state: CocoState, agent_name: str) -> dict:
         """Run a specialized agent and normalize its output into state fields."""
+        from ..cli.display import console  # noqa: PLC0415
+        console.print(f"[bold blue]⟳[/bold blue] [bold]{agent_name}[/bold]")
         result = agent.run(state)
         return {
             "messages": result.get("messages", []),

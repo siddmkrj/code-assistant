@@ -24,6 +24,18 @@ from langchain_core.tools import BaseTool
 from langgraph.prebuilt import create_react_agent
 
 
+def _format_args(args: dict) -> str:
+    """Return a compact one-line summary of tool call arguments."""
+    if not args:
+        return ""
+    # Show the most informative single argument rather than dumping everything
+    for key in ("path", "directory", "query", "pattern", "url", "command"):
+        if key in args:
+            return str(args[key])
+    first_val = str(next(iter(args.values())))
+    return first_val[:60] + ("..." if len(first_val) > 60 else "")
+
+
 class BaseCocoAgent(ABC):
     """Base class for all coco agents.
 
@@ -52,10 +64,29 @@ class BaseCocoAgent(ABC):
             human_feedback_needed: bool — True if agent needs user input
             clarification_question: str — the question (if needed)
         """
+        from ..cli.display import console  # noqa: PLC0415
+
+        all_messages: list[BaseMessage] = []
+
         try:
-            result = self._agent.invoke({"messages": state["messages"]})
+            for chunk in self._agent.stream({"messages": state["messages"]}):
+                if "agent" in chunk:
+                    for msg in chunk["agent"].get("messages", []):
+                        all_messages.append(msg)
+                        if isinstance(msg, AIMessage) and msg.tool_calls:
+                            for tc in msg.tool_calls:
+                                detail = _format_args(tc.get("args", {}))
+                                console.print(
+                                    f"  [cyan]→[/cyan] [bold]{tc['name']}[/bold]"
+                                    + (f"  [muted]{detail}[/muted]" if detail else "")
+                                )
+                elif "tools" in chunk:
+                    for msg in chunk["tools"].get("messages", []):
+                        all_messages.append(msg)
+                        name = getattr(msg, "name", "tool")
+                        preview = str(msg.content)[:80].replace("\n", " ")
+                        console.print(f"  [muted]← {name}: {preview}[/muted]")
         except Exception as e:
-            # Return error as an AI message rather than crashing
             error_msg = AIMessage(
                 content=f"I encountered an error: {e}\n\nPlease try rephrasing your request."
             )
@@ -65,12 +96,11 @@ class BaseCocoAgent(ABC):
                 "clarification_question": "",
             }
 
-        messages: list[BaseMessage] = result.get("messages", [])
         human_feedback_needed = False
         clarification_question = ""
 
         # Check if the last AI message contains a clarification request
-        for msg in reversed(messages):
+        for msg in reversed(all_messages):
             if isinstance(msg, AIMessage):
                 content = msg.content if isinstance(msg.content, str) else ""
                 if "[CLARIFY]" in content:
@@ -79,7 +109,7 @@ class BaseCocoAgent(ABC):
                 break
 
         return {
-            "messages": messages,
+            "messages": all_messages,
             "human_feedback_needed": human_feedback_needed,
             "clarification_question": clarification_question,
         }

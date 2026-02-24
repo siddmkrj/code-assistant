@@ -33,6 +33,7 @@ from .display import (
     print_muted,
     print_response,
     print_success,
+    print_token_usage,
     print_warning,
     print_welcome,
     spinner,
@@ -145,7 +146,7 @@ class CocoApp:
         }
 
         try:
-            with spinner("Thinking..."):
+            with spinner("working"):
                 result = self.graph.invoke(user_input, self._thread_id, state_updates)
         except Exception as e:
             # Check for GraphInterrupt (human-in-the-loop pause)
@@ -224,6 +225,20 @@ class CocoApp:
                 )
 
                 print_response(content, agent_name)
+
+                # Token usage — prefer usage_metadata, fall back to response_metadata
+                usage = getattr(msg, "usage_metadata", None) or {}
+                if not usage:
+                    usage = (getattr(msg, "response_metadata", None) or {}).get("usage", {})
+                if usage:
+                    details = usage.get("input_token_details", {})
+                    print_token_usage(
+                        input_tokens=usage.get("input_tokens", 0),
+                        output_tokens=usage.get("output_tokens", 0),
+                        cache_read=details.get("cache_read", 0) or usage.get("cache_read_input_tokens", 0),
+                        cache_creation=details.get("cache_creation", 0) or usage.get("cache_creation_input_tokens", 0),
+                    )
+
                 return
 
         print_muted("(agent returned no text response)")

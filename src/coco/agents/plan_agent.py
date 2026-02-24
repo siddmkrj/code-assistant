@@ -43,7 +43,9 @@ GUIDELINES:
 - Be specific about file names and function signatures
 - Consider existing code patterns and conventions (read files first)
 - Flag ambiguities using [CLARIFY]Your question[/CLARIFY] before planning
-- Prefer modifying existing code over creating new files when appropriate"""
+- Prefer modifying existing code over creating new files when appropriate
+- Propose the minimum number of changes — do not plan extra refactoring, new abstractions, or features beyond what was asked
+- Each step should touch only the files and functions directly required by the task"""
 
 
 class PlanAgent(BaseCocoAgent):

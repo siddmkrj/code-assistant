@@ -30,6 +30,7 @@ dependencies = [
     "sentence-transformers>=3.0.0",
     # Web search (free, no API key)
     "duckduckgo-search>=6.0.0",
+    "ddgs>=9.10.0",
     # CLI and display
     "prompt_toolkit>=3.0.0",
     "rich>=13.0.0",
