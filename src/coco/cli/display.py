@@ -6,7 +6,10 @@ for standard message types.
 """
 from __future__ import annotations
 
+import os
+import subprocess
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Generator
 
 from rich.console import Console
@@ -110,17 +113,68 @@ def print_file_diff(path: str, old: str | None, new: str) -> None:
             console.print(f"  [muted]{line}[/muted]")
 
 
-def print_token_usage(input_tokens: int, output_tokens: int, cache_read: int, cache_creation: int) -> None:
-    """Print a compact token usage line after each agent response."""
-    parts = [
-        f"in {input_tokens:,}",
-        f"out {output_tokens:,}",
-    ]
+def print_git_diff(cwd: str | Path = ".") -> None:
+    """Print the current git diff in color (unstaged changes)."""
+    env = {**os.environ, "GIT_PAGER": ""}
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--no-ext-diff", "--color=always"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env,
+        )
+    except FileNotFoundError:
+        return
+    except subprocess.TimeoutExpired:
+        return
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return
+
+    console.print()
+    console.print("[muted]Changes (git diff):[/muted]")
+    # Git's --color=always produces ANSI; Rich renders it
+    console.print(result.stdout, markup=False)
+
+
+def format_duration(seconds: float) -> str:
+    """Format elapsed seconds as '1m 29s' or '45s'."""
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    mins = int(seconds // 60)
+    secs = int(seconds % 60)
+    if secs:
+        return f"{mins}m {secs}s"
+    return f"{mins}m"
+
+
+def _format_token_count(count: int) -> str:
+    """Format token count as '2.2k' or plain number."""
+    if count >= 1000:
+        return f"{count / 1000:.1f}k"
+    return str(count)
+
+
+def print_token_usage(
+    input_tokens: int,
+    output_tokens: int,
+    cache_read: int,
+    cache_creation: int,
+    elapsed_seconds: float | None = None,
+) -> None:
+    """Print Claude Code-style token usage: ✳ (1m 29s · ↓ 2.2k · ↑ 1.5k)"""
+    parts: list[str] = []
+    if elapsed_seconds is not None and elapsed_seconds >= 0:
+        parts.append(format_duration(elapsed_seconds))
+    parts.append(f"↓ {_format_token_count(output_tokens)}")
+    parts.append(f"↑ {_format_token_count(input_tokens)}")
     if cache_read:
-        parts.append(f"cache-read {cache_read:,}")
+        parts.append(f"cache-read {_format_token_count(cache_read)}")
     if cache_creation:
-        parts.append(f"cache-write {cache_creation:,}")
-    console.print(f"[muted]tokens — {' · '.join(parts)}[/muted]")
+        parts.append(f"cache-write {_format_token_count(cache_creation)}")
+    console.print(f"[muted]✳ ({' · '.join(parts)})[/muted]")
 
 
 def confirm_action(prompt: str) -> bool:
@@ -130,15 +184,16 @@ def confirm_action(prompt: str) -> bool:
 
 
 @contextmanager
-def spinner(message: str) -> Generator[None, None, None]:
-    """Context manager showing a spinner during long-running operations."""
+def spinner(message: str = "Thinking…") -> Generator[None, None, None]:
+    """Context manager showing Claude Code-style spinner with elapsed time."""
     with Progress(
-        SpinnerColumn(),
-        TextColumn(f"[info]{message}[/info]"),
+        SpinnerColumn(style="cyan"),
+        TextColumn("[info]✳[/info] [info]{task.description}[/info]"),
+        TimeElapsedColumn(),
         transient=True,
         console=console,
     ) as progress:
-        progress.add_task("", total=None)
+        progress.add_task(message, total=None)
         yield
 
 

@@ -9,6 +9,48 @@ from __future__ import annotations
 from pathlib import Path
 
 from langchain_core.tools import tool
+from pydantic import BaseModel, Field
+
+
+class WriteFileArgs(BaseModel):
+    """Schema for write_file tool arguments."""
+
+    path: str = Field(..., description="Path to the file to write", min_length=1)
+    content: str = Field(default="", description="Content to write to the file")
+
+
+@tool(args_schema=WriteFileArgs)
+def write_file(path: str, content: str = "") -> str:
+    """Write content to a file. Creates parent directories as needed.
+
+    WARNING: This will overwrite the file if it already exists.
+    The CLI will prompt for confirmation before this tool is called
+    when safety.confirm_file_writes is true (the default).
+    """
+    try:
+        # Defensive validation for malformed LLM tool calls
+        if path is None:
+            return "Error: path is required and cannot be None"
+        path = str(path).strip()
+        if not path:
+            return "Error: path is required and cannot be empty"
+        if content is None:
+            content = ""
+        content = str(content)
+
+        from ..cli.display import print_file_diff  # noqa: PLC0415
+        p = Path(path)
+        old_content: str | None = p.read_text(encoding="utf-8") if p.exists() else None
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        print_file_diff(path, old_content, content)
+        return f"Successfully wrote {len(content)} characters to {path}"
+    except PermissionError:
+        return f"Error: Permission denied writing to: {path}"
+    except (TypeError, ValueError) as e:
+        return f"Error: Invalid arguments for write_file: {e}"
+    except Exception as e:
+        return f"Error writing to {path}: {e}"
 
 
 @tool
@@ -26,28 +68,6 @@ def read_file(path: str) -> str:
         return f"Error: {path} contains binary data and cannot be read as text."
     except Exception as e:
         return f"Error reading {path}: {e}"
-
-
-@tool
-def write_file(path: str, content: str) -> str:
-    """Write content to a file. Creates parent directories as needed.
-
-    WARNING: This will overwrite the file if it already exists.
-    The CLI will prompt for confirmation before this tool is called
-    when safety.confirm_file_writes is true (the default).
-    """
-    try:
-        from ..cli.display import print_file_diff  # noqa: PLC0415
-        p = Path(path)
-        old_content: str | None = p.read_text(encoding="utf-8") if p.exists() else None
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
-        print_file_diff(path, old_content, content)
-        return f"Successfully wrote {len(content)} characters to {path}"
-    except PermissionError:
-        return f"Error: Permission denied writing to: {path}"
-    except Exception as e:
-        return f"Error writing to {path}: {e}"
 
 
 @tool

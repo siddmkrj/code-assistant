@@ -24,18 +24,6 @@ from langchain_core.tools import BaseTool
 from langgraph.prebuilt import create_react_agent
 
 
-def _format_args(args: dict) -> str:
-    """Return a compact one-line summary of tool call arguments."""
-    if not args:
-        return ""
-    # Show the most informative single argument rather than dumping everything
-    for key in ("path", "directory", "query", "pattern", "url", "command"):
-        if key in args:
-            return str(args[key])
-    first_val = str(next(iter(args.values())))
-    return first_val[:60] + ("..." if len(first_val) > 60 else "")
-
-
 class BaseCocoAgent(ABC):
     """Base class for all coco agents.
 
@@ -64,9 +52,17 @@ class BaseCocoAgent(ABC):
             human_feedback_needed: bool — True if agent needs user input
             clarification_question: str — the question (if needed)
         """
-        from ..cli.display import console  # noqa: PLC0415
+        from ..cli.display import print_muted  # noqa: PLC0415
 
         all_messages: list[BaseMessage] = []
+
+        def _tool_hint(args: dict) -> str:
+            """One-line hint for which tool is running."""
+            for key in ("path", "directory", "query", "pattern", "url"):
+                if key in args and args[key]:
+                    val = str(args[key])
+                    return val[:50] + ("…" if len(val) > 50 else "")
+            return ""
 
         try:
             for chunk in self._agent.stream({"messages": state["messages"]}):
@@ -75,17 +71,16 @@ class BaseCocoAgent(ABC):
                         all_messages.append(msg)
                         if isinstance(msg, AIMessage) and msg.tool_calls:
                             for tc in msg.tool_calls:
-                                detail = _format_args(tc.get("args", {}))
-                                console.print(
-                                    f"  [cyan]→[/cyan] [bold]{tc['name']}[/bold]"
-                                    + (f"  [muted]{detail}[/muted]" if detail else "")
-                                )
+                                hint = _tool_hint(tc.get("args", {}))
+                                if hint:
+                                    print_muted(f"  → {tc['name']} {hint}")
+                                else:
+                                    print_muted(f"  → {tc['name']}")
                 elif "tools" in chunk:
                     for msg in chunk["tools"].get("messages", []):
                         all_messages.append(msg)
                         name = getattr(msg, "name", "tool")
-                        preview = str(msg.content)[:80].replace("\n", " ")
-                        console.print(f"  [muted]← {name}: {preview}[/muted]")
+                        print_muted(f"  ✓ {name}")
         except Exception as e:
             error_msg = AIMessage(
                 content=f"I encountered an error: {e}\n\nPlease try rephrasing your request."

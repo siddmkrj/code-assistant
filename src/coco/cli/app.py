@@ -12,6 +12,7 @@ here and handled interactively.
 """
 from __future__ import annotations
 
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -29,6 +30,7 @@ from .display import (
     console,
     make_index_progress,
     print_error,
+    print_git_diff,
     print_info,
     print_muted,
     print_response,
@@ -146,8 +148,10 @@ class CocoApp:
         }
 
         try:
-            with spinner("working"):
+            start_time = time.monotonic()
+            with spinner("Thinking…"):
                 result = self.graph.invoke(user_input, self._thread_id, state_updates)
+            elapsed = time.monotonic() - start_time
         except Exception as e:
             # Check for GraphInterrupt (human-in-the-loop pause)
             from langgraph.errors import GraphInterrupt  # noqa: PLC0415
@@ -158,7 +162,7 @@ class CocoApp:
             self.logger.log_system("agent_error", {"error": str(e)})
             return
 
-        self._display_result(result)
+        self._display_result(result, elapsed_seconds=elapsed)
 
     def _handle_interrupt(self, exc: Exception) -> None:
         """Handle a GraphInterrupt by prompting the user for clarification."""
@@ -183,15 +187,17 @@ class CocoApp:
             return
 
         try:
-            with spinner("Continuing..."):
+            start_time = time.monotonic()
+            with spinner("Thinking…"):
                 result = self.graph.resume(answer, self._thread_id)
+            elapsed = time.monotonic() - start_time
         except Exception as e:
             print_error(f"Error resuming: {e}")
             return
 
-        self._display_result(result)
+        self._display_result(result, elapsed_seconds=elapsed)
 
-    def _display_result(self, result: dict) -> None:
+    def _display_result(self, result: dict, elapsed_seconds: float | None = None) -> None:
         """Extract the last AI message from state and display it."""
         messages = result.get("messages", [])
         agent_name = result.get("current_agent", "coco")
@@ -237,7 +243,11 @@ class CocoApp:
                         output_tokens=usage.get("output_tokens", 0),
                         cache_read=details.get("cache_read", 0) or usage.get("cache_read_input_tokens", 0),
                         cache_creation=details.get("cache_creation", 0) or usage.get("cache_creation_input_tokens", 0),
+                        elapsed_seconds=elapsed_seconds,
                     )
+
+                if agent_name in ("code_agent", "plan_agent"):
+                    print_git_diff(self.config.working_directory)
 
                 return
 
