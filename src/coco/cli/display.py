@@ -6,8 +6,7 @@ for standard message types.
 """
 from __future__ import annotations
 
-import os
-import subprocess
+import difflib
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
@@ -16,6 +15,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.text import Text
 from rich.theme import Theme
 
 COCO_THEME = Theme({
@@ -30,6 +30,9 @@ COCO_THEME = Theme({
 })
 
 console = Console(theme=COCO_THEME)
+
+# Accumulates file changes during an agent run; flushed by print_git_diff.
+_pending_changes: list[dict] = []
 
 
 def print_welcome() -> None:
@@ -74,69 +77,64 @@ def print_muted(message: str) -> None:
 
 
 def print_file_diff(path: str, old: str | None, new: str) -> None:
-    """Print a coloured unified diff for a file write.
-
-    old=None means the file is being created for the first time.
-    """
-    import difflib  # noqa: PLC0415
-
+    """Record a file write so it can be shown in the post-run summary."""
     if old is None:
-        console.print(f"[success]+ new file[/success] [bold]{path}[/bold]")
-        lines = new.splitlines()
-        for line in lines[:50]:
-            console.print(f"  [green]+{line}[/green]")
-        if len(lines) > 50:
-            console.print(f"  [muted]... ({len(lines) - 50} more lines)[/muted]")
-        return
+        added = len(new.splitlines())
+        removed = 0
+        kind = "new"
+    else:
+        old_lines = old.splitlines(keepends=True)
+        new_lines = new.splitlines(keepends=True)
+        delta = list(difflib.ndiff(old_lines, new_lines))
+        added = sum(1 for d in delta if d.startswith("+ "))
+        removed = sum(1 for d in delta if d.startswith("- "))
+        kind = "updated" if (added or removed) else "unchanged"
 
-    diff = list(difflib.unified_diff(
-        old.splitlines(keepends=True),
-        new.splitlines(keepends=True),
-        fromfile=f"a/{path}",
-        tofile=f"b/{path}",
-        lineterm="",
-    ))
-
-    if not diff:
-        console.print(f"[muted]~ {path} (no changes)[/muted]")
-        return
-
-    console.print(f"[bold]{path}[/bold]")
-    for line in diff[2:]:  # skip the ---/+++ header lines
-        if line.startswith("@@"):
-            console.print(f"  [cyan]{line}[/cyan]")
-        elif line.startswith("+"):
-            console.print(f"  [green]{line}[/green]")
-        elif line.startswith("-"):
-            console.print(f"  [red]{line}[/red]")
-        else:
-            console.print(f"  [muted]{line}[/muted]")
+    if kind != "unchanged":
+        _pending_changes.append({"path": path, "kind": kind, "added": added, "removed": removed})
 
 
 def print_git_diff(cwd: str | Path = ".") -> None:
-    """Print the current git diff in color (unstaged changes)."""
-    env = {**os.environ, "GIT_PAGER": ""}
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--no-ext-diff", "--color=always"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            env=env,
-        )
-    except FileNotFoundError:
-        return
-    except subprocess.TimeoutExpired:
-        return
+    """Render the accumulated file-change summary and reset the pending list."""
+    global _pending_changes
 
-    if result.returncode != 0 or not result.stdout.strip():
+    if not _pending_changes:
         return
 
     console.print()
-    console.print("[muted]Changes (git diff):[/muted]")
-    # Git's --color=always produces ANSI; Rich renders it
-    console.print(result.stdout, markup=False)
+    console.print("[muted]Files changed:[/muted]")
+
+    for change in _pending_changes:
+        path = change["path"]
+        kind = change["kind"]
+        added = change["added"]
+        removed = change["removed"]
+
+        if kind == "new":
+            line = Text("  ● ", style="green")
+        elif kind == "deleted":
+            line = Text("  ● ", style="red")
+        else:
+            line = Text("  ● ", style="yellow")
+
+        line.append(path)
+        line.append("  ")
+
+        if kind == "new":
+            line.append(f"+{added}", style="green")
+        elif kind == "deleted":
+            line.append(f"-{removed}", style="red")
+        else:
+            if added:
+                line.append(f"+{added}", style="green")
+            if added and removed:
+                line.append(" / ", style="dim white")
+            if removed:
+                line.append(f"-{removed}", style="red")
+
+        console.print(line)
+
+    _pending_changes = []
 
 
 def format_duration(seconds: float) -> str:
